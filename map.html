@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    
+    <!-- leaflet css -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    
+    <!-- legend css -->
+    <link rel="stylesheet" href="Leaflet.Legend\leaflet.legend.css" />
+       
+    <!-- leaflet js -->    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+    <script src = "https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/d3-fetch.v1.min.js"></script>
+
+    <!-- legend js -->
+    <script src="Leaflet.Legend\leaflet.legend.js"></script>
+    
+    <!-- geojson data-->
+    <script src="LGD.js"></script>
+    
+    <style type="text/css">
+      body{
+        margin: 20px;
+        padding: 0;
+      }
+      #map {
+        width: 98vw;
+        height: 80vh;
+      }
+      .header{
+        display: flex;
+        padding: 10px;
+        justify-content: space-between;
+        align-items: center;
+      }
+      button{
+        margin-right:auto;
+      }
+      .info {
+        padding: 6px 8px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: white;
+        background: rgba(255,255,255,0.8);
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        border-radius: 5px;
+      }
+      .info h4 {
+        margin: 0 0 5px;
+        color: #777;
+      }
+      .legend {
+        line-height: 18px;
+        color: #555;
+      }
+      .legend i {
+        width: 38px;
+        height: 18px;
+        float: left;
+        margin-right: 10px;
+        opacity: 0.7;
+      }
+    </style>
+
+  </head>
+  <body>
+    <div class = "header">
+      <h1>The Troubles: Victims and Memorials</h1>
+      <a href="help.html">
+        <button>Further Explanations</button>
+      </a>
+    </div> 
+    <div id="map"></div>
+    <script>
+      // initialise map
+      var map = L.map('map').setView([54.66336214590244, -6.727034062010664], 8);
+      // add open street map layer
+      var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+
+      // CHOROPLETH MAP
+      // get color depending on religious distribution value
+      function getColor(d){
+        return d > 0.25    ? '#b2182b' :
+               d > 0.15    ? '#ef8a62' :
+               d > 0.05    ? '#fddbc7' :
+               d > -0.05   ? '#f2f0ef' :
+               d > -0.15   ? '#d1e5f0' :
+               d > -0.25   ? '#67a9cf' :
+                             '#2166ac';
+      }
+
+      function style(feature){
+        return {
+          fillColor: getColor(feature.properties.Distribution),
+          weight: 0.5,
+          opacity: 1,
+          color: 'white',
+          fillOpacity: 0.8
+        };
+      }
+
+      // Interactive features
+      //mouseover
+      function highlightFeature(e){
+        var layer = e.target;
+        layer.setStyle({
+          weight: 5,
+          color: '#666',
+          dashArray: '',
+          fillOpacity: 0.7
+        });
+        layer.bringToFront();
+        info.update(layer.feature.properties);
+      }
+      //mouseout
+      function resetHighlight(e){
+        geojson.resetStyle(e.target);
+        info.update();
+      }
+      //on click zoom
+      function zoomToFeature(e){
+        map.fitBounds(e.target.getBounds());
+      }
+
+      function onEachFeature(feature, layer){
+        layer.on({
+          mouseover: highlightFeature,
+          mouseout: resetHighlight,
+          click: zoomToFeature
+        });
+      }
+      
+      // add geoJSON data to map
+      var geojson = L.geoJSON(my_LGD, {style: style, onEachFeature : onEachFeature}).addTo(map);
+      var baseMaps = {
+        "OpenStreetMap": osm,
+      };
+      // load csv file and add markers
+      d3.csv("victims.csv").then(data => {
+        let dataVic = data.filter(row => row.gps_x && row.gps_y);
+        console.log(`Total victims after filtering: ${dataVic.length}`);
+        
+        // seperate arrays for different victim categories
+        const religionCatholic = dataVic.filter(row => row.religion === 'catholic');
+        const religionProtestant = dataVic.filter(row => row.religion === 'protestant');
+        const sexMale = dataVic.filter(row => row.sex === 'male');
+        const sexFemale = dataVic.filter(row => row.sex === 'female');
+        const statusParamLoy = dataVic.filter(row => /uvf|uda|uff|lvf|rhc|rhd/i.test(row.status));
+        const statusParamRep = dataVic.filter(row => /prov.|inla|off|iplo|iplo bb|rira/i.test(row.status));
+        const statusBritSec = dataVic.filter(row => /\bba|ruc|udr|eng.constab.|ex ser./i.test(row.status));
+        const statusCiv = dataVic.filter(row => /business man|other non combatant|po|pol|retail|security|taxi/i.test(row.status));
+        const statusOther = dataVic.filter(row => /alleged inf.|criminality|guard\/army|legal\/judicial|pm informer/i.test(row.status));
+        const agencyParamLoy = dataVic.filter(row => /uvf|uda|uff|lvf|rhc|rhd/i.test(row.agency));
+        const agencyParamRep = dataVic.filter(row => /prov.|inla|off|iplo|iplo bb|rira/i.test(row.agency));
+        const agencyBritSec = dataVic.filter(row => /\bba|ruc|udr|eng.constab.|ex ser./i.test(row.agency));
+
+        function createMarkerGroupVic(name, data){
+          const markerGroupVic = L.layerGroup();
+          const coordMap = {}; // keep track of existing coordinates
+          data.forEach(row => {
+            let gps_x = parseFloat(row.gps_x.trim());
+            let gps_y = parseFloat(row.gps_y.trim());
+            const coordKey = `${gps_x},${gps_y}`; //
+
+            if(coordMap[coordKey]){
+              // add small random offset to x and y if coordinates are identical
+              const offset = 0.01 *(Math.random() - 0.5);
+              gps_x += offset;
+              gps_y += offset;
+            } else {
+              coordMap[coordKey] = true; // mark coordinate as used
+            }
+
+            const iconUrl = getIconUrlVictims(row.religion, row.status);
+            const vicMarker = L.marker([gps_x, gps_y], {
+              icon: L.icon({iconUrl: iconUrl,iconSize: [15,15],iconAnchor:[0,0]})
+            });
+            vicMarker.bindPopup(`
+            <h3>${row.name} (${row.age})</h3> 
+            <p><b>Date:</b> ${row.date}
+            <br><b>Religion:</b> ${row.religion}
+            <br><b>Status:</b> ${row.status}
+            <br><b>Agency:</b> ${row.agency}
+            <br><b>Rationale:</b> ${row.rationale}
+            <br><b>Causality:</b> ${row.causality}
+            <br><b>Context:</b> ${row.context}
+            <br><b>Punitive:</b> ${row.punitive}
+            <br><b>Description:</b> ${row.description}</p>
+            `);
+            markerGroupVic.addLayer(vicMarker);
+          });
+          return markerGroupVic;
+        }
+      // create marker groups
+      const victimGroups = [
+        {name: "All Victims", data: dataVic},
+        {name: "Catholic Victims", data: religionCatholic},
+        {name: "Protestant Victims", data: religionProtestant},
+        {name: "Male Victims", data: sexMale},
+        {name: "Female Victims", data: sexFemale},
+        {name: "Status: Loyalist Paramilitary", data: statusParamLoy},
+        {name: "Status: Republican Paramilitary", data: statusParamRep},
+        {name: "Status: British Security", data: statusBritSec},
+        {name: "Status: Civilian", data: statusCiv},
+        {name: "Status: Other", data: statusOther},
+        {name: "Agency: Loyalist Paramilitary", data: agencyParamLoy},
+        {name: "Agency: Republican Paramilitary", data: agencyParamRep},
+        {name: "Agency: British Security Forces", data: agencyBritSec},
+      ];
+
+      //// MEMORIALS
+      // load csv file and add markers
+      d3.csv("memorials.csv").then(data => {
+        let dataMem = data.filter(row => row.gps_x && row.gps_y); // filter out rows with missing coordinates
+        // separate arrays for different memorial categories
+        const natureLoyalist = dataMem.filter(row => /Loyalist/i.test(row.nature));
+        const natureRepublican = dataMem.filter(row => /Republican/i.test(row.nature));
+        const natureBritSec = dataMem.filter(row => /British Security/i.test(row.nature));
+        const natureCiv = dataMem.filter(row => /Civilian/i.test(row.nature));
+        const natureOther = dataMem.filter(row => /Other/i.test(row.nature));
+
+        function createMarkerGroupMem(name, data){
+          const markerGroupMem = L.layerGroup();
+          data.forEach(row=> {
+            const gps_x = parseFloat(row.gps_x.trim());
+            const gps_y = parseFloat(row.gps_y.trim());
+            if (!isNaN(gps_x) && !isNaN(gps_y)){
+              const iconUrl = getIconUrlMemorials(row.nature);
+              const memMarker = L.marker([gps_x, gps_y], {
+                icon: L.icon({
+                  iconUrl: iconUrl,
+                  iconSize: [15,24],
+                  iconAnchor:[0,0]
+                })
+              }).bindPopup(`<h3>${row.title}</h3>
+                <p><b>Date of Incident:</b> ${row.date}
+                <br><b>Description: </b> ${row.description}
+                <br><b>Nature:</b> ${row.nature}
+                <br><b>Commemmorates:</b> ${row.commemorating}
+                <br><b>Commissioned by:</b> ${row.commissioned_by}</p>
+                `);
+                markerGroupMem.addLayer(memMarker);
+            } else{
+                console.error("Invalid GPS coordinates: ", row);
+            }
+            console.log('done');
+        });
+        return markerGroupMem;
+      }
+
+      // create Marker Groups
+      const memorialGroups = [
+        {name: "All Memorials", data: dataMem},
+        {name: "Loyalist Memorials", data: natureLoyalist},
+        {name: "Republican Memorials", data: natureRepublican},
+        {name: "Civilian Memorials", data: natureCiv},
+        {name: "British Security Memorials", data: natureBritSec},
+        {name: "Other Memorials", data: natureOther},
+      ];
+
+      // LAYER CONTROL
+      const overlayMaps = {};
+      // create layer for choropleth map
+      overlayMaps['religious distribution'] = geojson;
+      overlayMaps['all victims'] = dataVic; // evtl löschen, jenachdem wie intuitiv seite so ist
+      // create layers for memorials  
+      memorialGroups.forEach(group => {
+        const groupNameMem = `${group.name}`;
+        const layerNameMem = group.name.toLowerCase();
+        overlayMaps[`${layerNameMem}`] = createMarkerGroupMem(layerNameMem, group.data);
+      });
+      // create layers for victims
+      victimGroups.forEach(group => {
+        const groupNameVic = `${group.name}`;
+        const layerNameVic = group.name.toLowerCase();
+        overlayMaps[layerNameVic] = createMarkerGroupVic(layerNameVic, group.data);
+      });
+
+      // initialize layer control
+      var layerControl = L.control.layers(baseMaps, overlayMaps, {collapsed:false}).addTo(map);
+      console.log('total markers added:', Object.values(overlayMaps).reduce((sum, layer) => sum + layer.getLayers().length, 0));
+    }).catch(error => {
+      console.error("Error reading memorial CSV file: ", error);
+    });
+  }).catch(error => {
+    console.error("Error reading victims CSV file: ", error);
+  });
+  
+  function getIconUrlVictims(religion, status){
+        // check for keywords in dataset and set icon URL accordingly
+        const statusLower = status.toLowerCase();
+        const religionLower = religion.toLowerCase();
+        if(/catholic/i.test(religionLower)){
+          if (/business man|other non combatant|po|pol|retail|security|taxi/i.test(statusLower)) {
+            return 'markers/cath_civ.png';
+          } else if (/inla|off|prov./i.test(statusLower)) {
+            return 'markers/cath_rep.png';
+          } else if (/lvf|uda|uvf/i.test(statusLower)) {
+            return 'markers/cath_loy.png';
+          } else if (/ba|eng.constab.|ex ser|ruc|udr./i.test(statusLower)) {
+            return 'markers/cath_britsec.png';
+          } else {
+            return 'markers/cath_other.png';
+          }
+        } else if(/protestant/i.test(religionLower)){
+          if (/business man|other non combatant|po|pol|retail|security|taxi/i.test(statusLower)) {
+            return 'markers/prot_civ.png';
+          } else if (/inla|off|prov./i.test(statusLower)) {
+            return 'markers/prot_rep.png';
+          } else if (/lvf|uda|uvf/i.test(statusLower)) {
+            return 'markers/prot_loy.png';
+          } else if (/ba|eng.constab.|ex ser|ruc|udr./i.test(statusLower)) {
+            return 'markers/prot_britsec.png';
+          } else {
+            return 'markers/prot_other.png';
+          }
+        } else {
+          if (/business man|other non combatant|po|pol|retail|security|taxi/i.test(statusLower)) {
+            return 'markers/none_civ.png';
+          } else if (/inla|off|prov./i.test(statusLower)) {
+            return 'markers/none_rep.png';
+          } else if (/lvf|uda|uvf/i.test(statusLower)) {
+            return 'markers/none_loy.png';
+          } else if (/ba|eng.constab.|ex ser|ruc|udr./i.test(statusLower)) {
+            return 'markers/none_britsec.png';
+          } else {
+            return 'markers/none_other.png';
+          }
+          return 'markers/other_religion.png'; // religion not stated
+        }
+    };
+
+  function getIconUrlMemorials(nature){
+    // check for keywords in dataset and set icon URL accordingly
+    // Problem: Some memorials contain multiple keywords
+    const natureLower = nature.toLowerCase();
+    if (/civilian/i.test(natureLower)) {
+        return 'markers/mem_Civilian.png';
+    } else if (/paramilitary, republican/i.test(natureLower)) {
+        return 'markers/mem_ParamRep.png';
+    } else if (/paramilitary, loyalist/i.test(natureLower)) {
+        return 'markers/mem_ParamLoy.png';
+    } else if (/british security/i.test(natureLower)) {
+        return 'markers/mem_BritSec.png';
+    } else {
+        return 'markers/mem_Other.png'; // Fallback to generic icon
+    }
+  };
+
+      // OTHER INFORMATION ON PAGE
+
+      // INFO BOX
+      var info = L.control();
+      info.onAdd = function(map){
+        this._div = L.DomUtil.create('div','info');
+        this.update();
+        return this._div;
+      };
+
+      info.update = function(props){
+        this._div.innerHTML = '<h4> NI Religious Distribution</h4>' +  (props ?
+          '<b>' + props.LGDNAME + '</b><br />' +
+          'Population: ' + props.Population + '<br />' +
+          'Protestants: ' + (props['Protestant in %'] * 100) + '%<br />' +
+          'Catholics: ' + (props['Roman Catholic in %'] * 100) + '%<br />' +
+          'Other: ' + (props['Other in %'] * 100) + '%<br />' +
+          'Not Stated: ' + (props['Not Stated in %'] * 100) + '%<br />' +
+          'Distribution: ' + props.Distribution
+          : 'Hover over a district');
+      };
+      info.addTo(map);
+
+      // LEGEND
+      var legend = L.control.Legend({
+        position: "bottomleft",
+        legends: [{
+          label: "Strong Protestant Majority", // predominantly protestant?
+          type: "circle",
+          color: "#b2182b",
+          fill: true,
+        },{
+          label: "Moderate Protestant Majority",
+          type: "circle",
+          color: "#ef8a62",
+          fill: true,
+        },{
+          label: "Slight Protestant Majority",
+          type: "circle",
+          color: "#fddbc7",
+          fill: true,
+        },{
+          label: "No Significant Majority",
+          type: "circle",
+          color: "#f2f0ef",
+          fill: true,
+        },{
+          label: "Slight Catholic Majority",
+          type: "circle",
+          color: "#d1e5f0",
+          fill: true,
+        },{
+          label: "Moderate Catholic Majority",
+          type: "circle",
+          color: "#67a9cf",
+          fill: true,
+        },{
+          label: "Strong Catholic Majority",
+          type: "circle",
+          color: "#2166ac",
+          fill: true
+        },{
+          label: "Memorial",
+          type: "image",
+          url: "markers/mem_none.png",
+        },{
+          label: "Protestant Victim",
+          type: "image",
+          url: "markers/prot_generic.png",
+        },{
+          label: "Catholic Victim",
+          type: "image",
+          url: "markers/cath_generic.png",
+        },{
+          label: "Religion not relevant",
+          type: "image",
+          url: "markers/other_religion.png",
+        },{
+          label: "Civilian",
+          type: "rectangle",
+          color: "#7F7F7F",
+          fill: true
+        }, {
+          label: "Republican Paramilitary",
+          type: "rectangle",
+          color: "#009A44",
+          fill: true
+        },{
+          label: "Loyalist Paramilitary",
+          type: "rectangle",
+          color: "#FF8200",
+          fill: true
+        },{
+          label: "British Security Forces",
+          type: "rectangle",
+          color: "#023AB6",
+          fill: true
+        },{
+          label: "Other",
+          type: "rectangle",
+          color: "#FFFF00",
+          fill: true
+        }],
+        column: 1
+      }).addTo(map);
+
+    </script>
+  </body>
+</html>
